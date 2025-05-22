@@ -4,6 +4,7 @@ on:
   workflow_call:
 
 env:
+  GODOT_VERSION: "4.4.1"
   GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/release.keystore 
   GODOT_ANDROID_KEYSTORE_RELEASE_USER: Unknown
   GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: 123456
