@@ -47,7 +47,7 @@ jobs:
       matrix:
         platform:
           - name: Windows
-            system: "ubuntu-latest" # CHANGED: Windows build will now run on Ubuntu
+            system: "ubuntu-latest"
             extension: ".exe"
             csharp: ${{ needs.check.outputs.using_dotnet }}
           - name: macOS
@@ -98,12 +98,12 @@ jobs:
 
       # Setup Godot
       - name: Setup Godot
-        uses: chickensoft-games/setup-godot@v2 # Updated to v2 (as per previous recommendation)
+        uses: chickensoft-games/setup-godot@v2
         with:
           version: ${{ env.GODOT_VERSION }}
           use-dotnet: ${{ needs.check.outputs.using_dotnet }}
           include-templates: true
-          cache: true # Added caching for faster builds
+          cache: true
 
       - name: Verify Godot Version
         run: |
@@ -143,9 +143,6 @@ jobs:
       - name: Compress build files
         run: |
           cd build
-          # On Ubuntu, 'zip' should be available.
-          # 'sudo' might not be strictly necessary here since it's the runner's workspace,
-          # but it won't hurt on Ubuntu.
           zip -r ./${{ matrix.platform.name }}.zip *
 
       - name: Display structure of build files
