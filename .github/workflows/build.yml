@@ -131,6 +131,23 @@ jobs:
           # Verify extraction
           ls addons/spine_godot/ || dir addons\spine_godot\ || echo "Directory listing failed"
 
+      # Alternative: Download universal Spine GDExtension (if available)
+      - name: Download Universal Spine GDExtension (Alternative)
+        if: false  # Set to true if using universal build
+        shell: bash
+        run: |
+          echo "Downloading Universal Spine GDExtension..."
+          
+          # Create addons directory
+          mkdir -p addons/spine_godot
+          
+          # Download universal build
+          curl -L -o spine-gdextension.zip "https://github.com/EsotericSoftware/spine-runtimes/releases/download/${SPINE_GDEXTENSION_VERSION}/spine-godot-all-platforms.zip"
+          unzip -o spine-gdextension.zip -d addons/
+          
+          # Verify structure
+          find addons/spine_godot -type f -name "*.gdextension" -o -name "*.so" -o -name "*.dll" -o -name "*.dylib"
+
       # Setup Android SDK (for Android builds)
       - name: Set up JDK 17
         if: matrix.platform.name == 'Android'
@@ -163,7 +180,30 @@ jobs:
       - name: Import Project Assets
         run: |
           echo "Importing project assets and GDExtensions..."
-          godot --headless --import --quit-after 10 || true
+          
+          # Check if project.godot exists
+          if [ ! -f "project.godot" ]; then
+            echo "ERROR: project.godot not found. Creating minimal project file..."
+            cat > project.godot << 'EOF'
+          ; Engine configuration file.
+          ; It's best edited using the editor UI and not directly,
+          ; since the parameters that go here are not all obvious.
+          ;
+          ; File created by Godot Engine
+          
+          [application]
+          
+          config/name="Spine GDExtension Project"
+          config/features=PackedStringArray("4.4", "Forward Plus")
+          
+          [rendering]
+          
+          renderer/rendering_method="forward_plus"
+          EOF
+          fi
+          
+          # Import with explicit project path
+          godot --headless --path "$(pwd)" --import --quit-after 10 || true
           
           # Wait a moment for import to complete
           sleep 5
@@ -172,7 +212,8 @@ jobs:
       - name: Build Godot Solutions
         if: needs.check.outputs.using_dotnet == 'true'
         run: |
-          godot --headless --build-solutions --quit || true
+          echo "Building Godot solutions..."
+          godot --headless --path "$(pwd)" --build-solutions --quit || true
 
       # Create export presets if they don't exist
       - name: Create Export Presets
@@ -267,6 +308,15 @@ jobs:
         shell: bash
         run: |
           echo "Starting export for ${{ matrix.platform.name }}..."
+          
+          # Check if project.godot exists
+          if [ ! -f "project.godot" ]; then
+            echo "ERROR: project.godot not found in current directory"
+            echo "Current directory contents:"
+            ls -la
+            exit 1
+          fi
+          
           mkdir -p build
           
           # Use the correct preset name based on platform
@@ -288,10 +338,13 @@ jobs:
               ;;
           esac
           
-          # Export with verbose output
-          godot --headless --verbose --export-release "$PRESET_NAME" "./build/${{ github.event.repository.name }}${{ matrix.platform.extension }}" || {
+          echo "Using preset: $PRESET_NAME"
+          echo "Project path: $(pwd)"
+          
+          # Export with verbose output, specifying project path explicitly
+          godot --headless --verbose --path "$(pwd)" --export-release "$PRESET_NAME" "./build/${{ github.event.repository.name }}${{ matrix.platform.extension }}" || {
             echo "Export failed, trying debug export..."
-            godot --headless --verbose --export-debug "$PRESET_NAME" "./build/${{ github.event.repository.name }}_debug${{ matrix.platform.extension }}"
+            godot --headless --verbose --path "$(pwd)" --export-debug "$PRESET_NAME" "./build/${{ github.event.repository.name }}_debug${{ matrix.platform.extension }}"
           }
 
       # Package the build
