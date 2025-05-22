@@ -3,7 +3,7 @@ name: Build Godot Project with Spine GDExtension
 on: 
   workflow_call:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main ]
 
@@ -129,7 +129,7 @@ jobs:
           unzip -o spine-gdextension.zip -d addons/spine_godot/
           
           # Verify extraction
-          ls -la addons/spine_godot/
+          ls addons/spine_godot/ || dir addons\spine_godot\ || echo "Directory listing failed"
 
       # Setup Android SDK (for Android builds)
       - name: Set up JDK 17
@@ -243,15 +243,24 @@ jobs:
 
       # Debug: Show project structure
       - name: Debug Project Structure
+        shell: bash
         run: |
           echo "Project structure:"
-          find . -type f -name "*.gdextension" -o -name "*.dll" -o -name "*.so" -o -name "*.dylib" | head -20
+          find . -type f -name "*.gdextension" -o -name "*.dll" -o -name "*.so" -o -name "*.dylib" 2>/dev/null | head -20 || echo "No extension files found"
           echo ""
           echo "Addons directory:"
-          ls -la addons/ || echo "No addons directory"
+          if [ -d "addons" ]; then
+            ls addons/ 2>/dev/null || echo "Cannot list addons directory"
+          else
+            echo "No addons directory found"
+          fi
           echo ""
           echo "Export presets:"
-          cat export_presets.cfg | head -20 || echo "No export presets"
+          if [ -f "export_presets.cfg" ]; then
+            head -20 export_presets.cfg || echo "Cannot read export presets"
+          else
+            echo "No export presets file"
+          fi
 
       # Export the project
       - name: Export Project
@@ -303,12 +312,17 @@ jobs:
 
       # Show build results
       - name: Display Build Results
+        shell: bash
         run: |
           echo "Build directory contents:"
-          ls -la build/
-          echo ""
-          echo "Build file sizes:"
-          du -h build/* || echo "No build files found"
+          if [ -d "build" ]; then
+            ls build/ 2>/dev/null || echo "Cannot list build directory"
+            echo ""
+            echo "Build file sizes:"
+            du -h build/* 2>/dev/null || ls -l build/* 2>/dev/null || echo "No build files found"
+          else
+            echo "No build directory found"
+          fi
 
       # Upload artifacts
       - name: Upload Build Artifact
