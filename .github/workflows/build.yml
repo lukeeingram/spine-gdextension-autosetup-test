@@ -79,6 +79,24 @@ jobs:
       - name: Display structure of build files
         run: ls -R ./
 
+      - name: Display structure of project files and check Spine bin directory
+        working-directory: ./test # Assuming your project is in 'test'
+        run: |
+          echo "Listing contents of project root (./test):"
+          ls -A
+          echo "--- Specifically checking project's bin directory (./test/bin) ---"
+          if [ -d "./bin" ]; then
+            ls -R ./bin
+          else
+            echo "./test/bin directory NOT FOUND!"
+          fi
+
+      - name: Install rcedit
+        if: matrix.platform.name == 'Windows Desktop' && runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq rcedit
+
       # Setup .NET
       - name: Setup .NET SDK
         if: needs.check.outputs.using_dotnet == 'true'
