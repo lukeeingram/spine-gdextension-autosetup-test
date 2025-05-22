@@ -1,10 +1,10 @@
 name: Build
 
-on: 
+on:
   workflow_call:
 
 env:
-  GODOT_VERSION: "4.4.1"
+  GODOT_VERSION: "4.4.1" 
   GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/release.keystore 
   GODOT_ANDROID_KEYSTORE_RELEASE_USER: Unknown
   GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: 123456
@@ -22,7 +22,7 @@ jobs:
 
       - name: Check if project is using C#
         id: check_dotnet
-        run: | 
+        run: |
           if [ -f *.csproj ]; then
             echo "using_dotnet=true" >> $GITHUB_OUTPUT
             echo "C# project found, C# workflow will be executed in the next job."
@@ -30,7 +30,7 @@ jobs:
             echo "using_dotnet=false" >> $GITHUB_OUTPUT
             echo "Non-C# project, C# workflow will be skipped in the next job."
           fi
-          
+
   build:
     name: Build
     needs: check
@@ -41,7 +41,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: 
+        platform:
           - name: Windows
             system: "windows-latest"
             extension: ".exe"
@@ -62,16 +62,12 @@ jobs:
             system: "ubuntu-latest"
             extension: ".apk"
             csharp: ${{ needs.check.outputs.using_dotnet }}
-          # - name: iOS
-          #   system: "macos-latest"
-          #   extension: ".ipa"
         exclude:
-          # Web platform does not support C# projects.
-          - platform: 
+          - platform:
               name: Web
               csharp: 'true'
     steps:
-        # Checkout
+      # Checkout
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -93,18 +89,17 @@ jobs:
       - name: Build C# Projects
         if: needs.check.outputs.using_dotnet == 'true'
         run: |
-            dotnet restore
-            dotnet build
+          dotnet restore
+          dotnet build
 
       # Setup Godot
       - name: Setup Godot
-        uses: chickensoft-games/setup-godot@v1
+        uses: chickensoft-games/setup-godot@v2 # Updated to v2
         with:
-          # Version must include major, minor, and patch, and be >= 4.0.0
-          # Pre-release label is optional.
-          version: 4.3.0 # also valid: 4.0.0.rc1 or 4.0.0, etc
+          version: ${{ env.GODOT_VERSION }} # Using the GODOT_VERSION env variable
           use-dotnet: ${{ needs.check.outputs.using_dotnet }}
           include-templates: true
+          cache: true # Added caching for faster builds
 
       - name: Verify Godot Version
         run: |
@@ -134,7 +129,7 @@ jobs:
       # Build the project for each platform
       - name: Build Godot Solutions
         run: godot --headless --build-solutions --quit || exit 0
-        
+
       - name: Export Project
         run: |
           mkdir -v -p build
