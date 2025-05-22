@@ -142,7 +142,7 @@ jobs:
           mkdir -p addons/spine_godot
           
           # Download universal build
-          curl -L -o spine-gdextension.zip "https://github.com/EsotericSoftware/spine-runtimes/releases/download/${SPINE_GDEXTENSION_VERSION}/spine-godot-all-platforms.zip"
+          curl -L -o spine-gdextension.zip "https://spine-godot.s3.eu-central-1.amazonaws.com/4.2/4.4.1-stable/spine-godot-extension-4.2-4.4.1-stable.zip"
           unzip -o spine-gdextension.zip -d addons/
           
           # Verify structure
@@ -178,6 +178,7 @@ jobs:
 
       # Import project to ensure Spine GDExtension is loaded
       - name: Import Project Assets
+        shell: bash
         run: |
           echo "Importing project assets and GDExtensions..."
           
@@ -211,6 +212,7 @@ jobs:
       # Build Godot solutions (for C# projects)
       - name: Build Godot Solutions
         if: needs.check.outputs.using_dotnet == 'true'
+        shell: bash
         run: |
           echo "Building Godot solutions..."
           godot --headless --path "$(pwd)" --build-solutions --quit || true
