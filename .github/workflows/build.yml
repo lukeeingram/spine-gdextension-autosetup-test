@@ -46,7 +46,7 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - name: Windows Deskop
+          - name: Windows Desktop
             system: "ubuntu-latest"
             extension: ".exe"
             csharp: ${{ needs.check.outputs.using_dotnet }}
@@ -61,10 +61,6 @@ jobs:
           - name: Web
             system: "ubuntu-latest"
             extension: ".html"
-            csharp: ${{ needs.check.outputs.using_dotnet }}
-          - name: Android
-            system: "ubuntu-latest"
-            extension: ".apk"
             csharp: ${{ needs.check.outputs.using_dotnet }}
         exclude:
           - platform:
