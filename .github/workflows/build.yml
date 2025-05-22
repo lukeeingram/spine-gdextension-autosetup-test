@@ -90,12 +90,27 @@ jobs:
           else
             echo "./test/bin directory NOT FOUND!"
           fi
-
-      - name: Install rcedit
+        
+      - name: Setup rcedit for Windows export on Linux
         if: matrix.platform.name == 'Windows Desktop' && runner.os == 'Linux'
         run: |
+          # Install Wine
           sudo apt-get update -qq
-          sudo apt-get install -y -qq rcedit
+          sudo apt-get install -y -qq wine64
+
+          RCEDIT_VERSION="1.1.1" # Example version, check for current stable
+          RCEDIT_URL="https://github.com/electron/rcedit/releases/download/v${RCEDIT_VERSION}/rcedit-x64.exe"
+          wget -q -O /usr/local/bin/rcedit.exe "${RCEDIT_URL}"
+          chmod +x /usr/local/bin/rcedit.exe
+
+          # Create a wrapper script so 'rcedit' command works via Wine
+          # Godot will look for an executable named 'rcedit' in PATH
+          echo '#!/bin/bash' | sudo tee /usr/local/bin/rcedit > /dev/null
+          echo 'wine /usr/local/bin/rcedit.exe "$@"' | sudo tee -a /usr/local/bin/rcedit > /dev/null
+          sudo chmod +x /usr/local/bin/rcedit
+
+          # Verify (optional)
+          rcedit --version
 
       # Setup .NET
       - name: Setup .NET SDK
@@ -114,7 +129,8 @@ jobs:
       - name: Setup Godot
         uses: chickensoft-games/setup-godot@v2
         with:
-          version: ${{ env.GODOT_VERSION }}
+          version: "4.4.1.stable"
+          #version: ${{ env.GODOT_VERSION }}
           use-dotnet: ${{ needs.check.outputs.using_dotnet }}
           include-templates: true
           cache: true
