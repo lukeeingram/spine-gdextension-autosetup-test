@@ -46,7 +46,7 @@ jobs:
       fail-fast: false
       matrix:
         platform:
-          - name: Windows
+          - name: Windows Deskop
             system: "ubuntu-latest"
             extension: ".exe"
             csharp: ${{ needs.check.outputs.using_dotnet }}
