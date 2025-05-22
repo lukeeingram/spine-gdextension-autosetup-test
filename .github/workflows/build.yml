@@ -2,16 +2,16 @@ name: Build
 
 on:
   workflow_call:
-  push:
+    push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
 
 env:
-  GODOT_VERSION: "4.4.1" 
-  GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/release.keystore 
-  GODOT_ANDROID_KEYSTORE_RELEASE_USER: Unknown
-  GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: 123456
+  GODOT_VERSION: "4.4.1" # Or the latest stable version
+  GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/release.keystore # Consider storing this as a secret
+  GODOT_ANDROID_KEYSTORE_RELEASE_USER: Unknown # Consider storing this as a secret
+  GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: 123456 # Consider storing this as a secret
 
 jobs:
   check:
@@ -47,7 +47,7 @@ jobs:
       matrix:
         platform:
           - name: Windows
-            system: "windows-latest"
+            system: "ubuntu-latest" # CHANGED: Windows build will now run on Ubuntu
             extension: ".exe"
             csharp: ${{ needs.check.outputs.using_dotnet }}
           - name: macOS
@@ -98,9 +98,9 @@ jobs:
 
       # Setup Godot
       - name: Setup Godot
-        uses: chickensoft-games/setup-godot@v2 # Updated to v2
+        uses: chickensoft-games/setup-godot@v2 # Updated to v2 (as per previous recommendation)
         with:
-          version: ${{ env.GODOT_VERSION }} # Using the GODOT_VERSION env variable
+          version: ${{ env.GODOT_VERSION }}
           use-dotnet: ${{ needs.check.outputs.using_dotnet }}
           include-templates: true
           cache: true # Added caching for faster builds
@@ -136,14 +136,17 @@ jobs:
 
       - name: Export Project
         run: |
-          mkdir -v -p build
+          mkdir build # Removed -v -p flags for cross-shell compatibility (from previous fix)
           godot --headless --verbose --export-release "${{ matrix.platform.name }}" ./build/${{ github.event.repository.name }}${{ matrix.platform.extension }}
 
       # Compress the build files and upload them as an artifact
       - name: Compress build files
         run: |
           cd build
-          sudo zip -r ./${{ matrix.platform.name }}.zip *
+          # On Ubuntu, 'zip' should be available.
+          # 'sudo' might not be strictly necessary here since it's the runner's workspace,
+          # but it won't hurt on Ubuntu.
+          zip -r ./${{ matrix.platform.name }}.zip *
 
       - name: Display structure of build files
         run: ls -R ./build
