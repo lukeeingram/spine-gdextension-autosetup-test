@@ -130,14 +130,19 @@ jobs:
           fi
           env
 
-      # Build the project for each platform
-      - name: Build Godot Solutions
-        run: godot --headless --build-solutions --quit || exit 0
-
+      # Export the Project for the current platform
       - name: Export Project
         run: |
-          mkdir build # Removed -v -p flags for cross-shell compatibility (from previous fix)
-          godot --headless --verbose --export-release "${{ matrix.platform.name }}" ./build/${{ github.event.repository.name }}${{ matrix.platform.extension }}
+          mkdir build # Creates the 'build' directory in the repository root
+          
+          # Navigate into your Godot project's root folder ('test')
+          # This is crucial for Godot to find your project.godot file.
+          cd test 
+          
+          # Now, execute the Godot export command.
+          # The output path '../build/' correctly points back to the 'build' folder 
+          # in the repository root from within the 'test' directory.
+          godot --headless --verbose --export-release "${{ matrix.platform.name }}" ../build/${{ github.event.repository.name }}${{ matrix.platform.extension }}
 
       # Compress the build files and upload them as an artifact
       - name: Compress build files
