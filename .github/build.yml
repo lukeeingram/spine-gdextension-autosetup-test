@@ -1,0 +1,334 @@
+name: Build Godot Project with Spine GDExtension
+
+on: 
+  workflow_call:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  GODOT_VERSION: "4.4.1"
+  SPINE_GDEXTENSION_VERSION: "4.2"
+  GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ github.workspace }}/release.keystore 
+  GODOT_ANDROID_KEYSTORE_RELEASE_USER: Unknown
+  GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD: 123456
+
+jobs:
+  check:
+    name: Check Project Configuration
+    runs-on: ubuntu-latest
+    outputs:
+      using_dotnet: ${{ steps.check_dotnet.outputs.using_dotnet }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check if project is using C#
+        id: check_dotnet
+        run: | 
+          if [ -f *.csproj ] || [ -f "*.sln" ]; then
+            echo "using_dotnet=true" >> $GITHUB_OUTPUT
+            echo "C# project detected"
+          else
+            echo "using_dotnet=false" >> $GITHUB_OUTPUT
+            echo "GDScript project detected"
+          fi
+
+  build:
+    name: Build ${{ matrix.platform.name }}
+    needs: check
+    runs-on: ${{ matrix.platform.runner }}
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+      DOTNET_NOLOGO: true
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: 
+          - name: Windows
+            runner: "windows-latest"
+            extension: ".exe"
+            template: "windows"
+          - name: macOS
+            runner: "macos-latest"
+            extension: ".app"
+            template: "macos"
+          - name: Linux
+            runner: "ubuntu-latest"
+            extension: ".x86_64"
+            template: "linux"
+          - name: Web
+            runner: "ubuntu-latest"
+            extension: ".html"
+            template: "web"
+          - name: Android
+            runner: "ubuntu-latest"
+            extension: ".apk"
+            template: "android"
+        exclude:
+          # Web platform doesn't support GDExtensions
+          - platform: 
+              name: Web
+
+    steps:
+      # Checkout code
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+          submodules: recursive
+
+      # Setup .NET for C# projects
+      - name: Setup .NET SDK
+        if: needs.check.outputs.using_dotnet == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+
+      # Setup Godot
+      - name: Setup Godot
+        uses: chickensoft-games/setup-godot@v1
+        with:
+          version: ${{ env.GODOT_VERSION }}
+          use-dotnet: ${{ needs.check.outputs.using_dotnet }}
+          include-templates: true
+
+      - name: Verify Godot Installation
+        run: |
+          godot --version
+
+      # Download and setup Spine GDExtension
+      - name: Download Spine GDExtension
+        shell: bash
+        run: |
+          echo "Downloading Spine GDExtension..."
+          
+          # Create addons directory if it doesn't exist
+          mkdir -p addons/spine_godot
+          
+          # Download the appropriate version for the platform
+          case "${{ matrix.platform.name }}" in
+            "Windows")
+              SPINE_URL="https://spine-godot.s3.eu-central-1.amazonaws.com/4.2/4.4.1-stable/spine-godot-extension-4.2-4.4.1-stable.zip"
+              ;;
+            "macOS")
+              SPINE_URL="https://spine-godot.s3.eu-central-1.amazonaws.com/4.2/4.4.1-stable/spine-godot-extension-4.2-4.4.1-stable.zip"
+              ;;
+            "Linux")
+              SPINE_URL="https://spine-godot.s3.eu-central-1.amazonaws.com/4.2/4.4.1-stable/spine-godot-extension-4.2-4.4.1-stable.zip"
+              ;;
+            "Android")
+              SPINE_URL="https://spine-godot.s3.eu-central-1.amazonaws.com/4.2/4.4.1-stable/spine-godot-extension-4.2-4.4.1-stable.zip"
+              ;;
+          esac
+          
+          # Download and extract
+          curl -L -o spine-gdextension.zip "$SPINE_URL"
+          unzip -o spine-gdextension.zip -d addons/spine_godot/
+          
+          # Verify extraction
+          ls -la addons/spine_godot/
+
+      # Setup Android SDK (for Android builds)
+      - name: Set up JDK 17
+        if: matrix.platform.name == 'Android'
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        if: matrix.platform.name == 'Android'
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Android Keystore
+        if: matrix.platform.name == 'Android'
+        run: |
+          if [ ! -f $GODOT_ANDROID_KEYSTORE_RELEASE_PATH ]; then
+            keytool -genkey -v -keystore release.keystore -alias $GODOT_ANDROID_KEYSTORE_RELEASE_USER -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass $GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD -keypass $GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD \
+              -dname "CN=Unknown, OU=Unknown, O=Unknown, L=Unknown, S=Unknown, C=Unknown"
+          fi
+
+      # Build C# projects if needed
+      - name: Build C# Projects
+        if: needs.check.outputs.using_dotnet == 'true'
+        run: |
+          dotnet restore
+          dotnet build --configuration Release
+
+      # Import project to ensure Spine GDExtension is loaded
+      - name: Import Project Assets
+        run: |
+          echo "Importing project assets and GDExtensions..."
+          godot --headless --import --quit-after 10 || true
+          
+          # Wait a moment for import to complete
+          sleep 5
+
+      # Build Godot solutions (for C# projects)
+      - name: Build Godot Solutions
+        if: needs.check.outputs.using_dotnet == 'true'
+        run: |
+          godot --headless --build-solutions --quit || true
+
+      # Create export presets if they don't exist
+      - name: Create Export Presets
+        shell: bash
+        run: |
+          if [ ! -f export_presets.cfg ]; then
+            echo "Creating basic export presets..."
+            cat > export_presets.cfg << 'EOF'
+          [preset.0]
+          name="Windows Desktop"
+          platform="Windows Desktop"
+          runnable=true
+          advanced_options=false
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          encrypt_pck=false
+          encrypt_directory=false
+          
+          [preset.1]
+          name="macOS"
+          platform="macOS"
+          runnable=true
+          advanced_options=false
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          encrypt_pck=false
+          encrypt_directory=false
+          
+          [preset.2]
+          name="Linux/X11"
+          platform="Linux/X11"
+          runnable=true
+          advanced_options=false
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          encrypt_pck=false
+          encrypt_directory=false
+          
+          [preset.3]
+          name="Android"
+          platform="Android"
+          runnable=true
+          advanced_options=false
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_resources"
+          encryption_include_filters=""
+          encryption_exclude_filters=""
+          encrypt_pck=false
+          encrypt_directory=false
+          keystore/debug=""
+          keystore/debug_user=""
+          keystore/debug_password=""
+          keystore/release=""
+          keystore/release_user=""
+          keystore/release_password=""
+          EOF
+          fi
+
+      # Debug: Show project structure
+      - name: Debug Project Structure
+        run: |
+          echo "Project structure:"
+          find . -type f -name "*.gdextension" -o -name "*.dll" -o -name "*.so" -o -name "*.dylib" | head -20
+          echo ""
+          echo "Addons directory:"
+          ls -la addons/ || echo "No addons directory"
+          echo ""
+          echo "Export presets:"
+          cat export_presets.cfg | head -20 || echo "No export presets"
+
+      # Export the project
+      - name: Export Project
+        shell: bash
+        run: |
+          echo "Starting export for ${{ matrix.platform.name }}..."
+          mkdir -p build
+          
+          # Use the correct preset name based on platform
+          case "${{ matrix.platform.name }}" in
+            "Windows")
+              PRESET_NAME="Windows Desktop"
+              ;;
+            "macOS")
+              PRESET_NAME="macOS"
+              ;;
+            "Linux")
+              PRESET_NAME="Linux/X11"
+              ;;
+            "Android")
+              PRESET_NAME="Android"
+              ;;
+            *)
+              PRESET_NAME="${{ matrix.platform.name }}"
+              ;;
+          esac
+          
+          # Export with verbose output
+          godot --headless --verbose --export-release "$PRESET_NAME" "./build/${{ github.event.repository.name }}${{ matrix.platform.extension }}" || {
+            echo "Export failed, trying debug export..."
+            godot --headless --verbose --export-debug "$PRESET_NAME" "./build/${{ github.event.repository.name }}_debug${{ matrix.platform.extension }}"
+          }
+
+      # Package the build
+      - name: Package Build
+        shell: bash
+        run: |
+          cd build
+          
+          # Create archive based on platform
+          case "${{ matrix.platform.name }}" in
+            "Windows")
+              7z a -tzip "${{ matrix.platform.name }}.zip" *
+              ;;
+            *)
+              zip -r "${{ matrix.platform.name }}.zip" * || tar -czf "${{ matrix.platform.name }}.tar.gz" *
+              ;;
+          esac
+
+      # Show build results
+      - name: Display Build Results
+        run: |
+          echo "Build directory contents:"
+          ls -la build/
+          echo ""
+          echo "Build file sizes:"
+          du -h build/* || echo "No build files found"
+
+      # Upload artifacts
+      - name: Upload Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.platform.name }}-build
+          path: |
+            build/${{ matrix.platform.name }}.zip
+            build/${{ matrix.platform.name }}.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+      # Upload debug logs on failure
+      - name: Upload Debug Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-logs-${{ matrix.platform.name }}
+          path: |
+            .godot/
+            *.log
+          if-no-files-found: ignore
+          retention-days: 3
